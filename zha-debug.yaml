@@ -1,0 +1,42 @@
+blueprint:
+  name: "ZHA Remote Debug Logger to File"
+  description: "Logs all ZHA events from one selected remote to a text file."
+  domain: automation
+
+  input:
+    remote:
+      name: Remote to debug
+      selector:
+        device:
+          integration: zha
+
+    test_label:
+      name: Test label
+      default: "ZHA remote debug"
+      selector:
+        text:
+
+mode: queued
+max: 200
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote
+
+variables:
+  test_label: !input test_label
+  e: "{{ trigger.event.data }}"
+
+action:
+  - service: notify.eglo_remote_debug_file
+    data:
+      message: >
+        {{ now().strftime('%Y-%m-%d %H:%M:%S') }} | {{ test_label }}
+        | device_id={{ e.device_id }}
+        | endpoint_id={{ e.endpoint_id }}
+        | cluster_id={{ e.cluster_id }}
+        | command={{ e.command }}
+        | args={{ e.args }}
+        | params={{ e.params }}
