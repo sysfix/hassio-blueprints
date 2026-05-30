@@ -1,0 +1,346 @@
+blueprint:
+  name: Philips Tap Dial Switch - 2 targets + long press color control
+  description: >
+    Control two light targets with a Philips Hue Tap Dial Switch using ZHA.
+    Buttons 1 and 2 turn targets on. Buttons 3 and 4 turn targets off.
+    Dial dims the currently selected light.
+    Long press button 1/3 changes white temperature.
+    Long press button 2/4 cycles through the color spectrum.
+  domain: automation
+
+  input:
+    remote:
+      name: Philips Hue Tap Dial Switch
+      selector:
+        device:
+          integration: zha
+          manufacturer: Signify Netherlands B.V.
+          model: RDM002
+          multiple: false
+
+    first_light:
+      name: First Light
+      description: Light(s) controlled by button 1 on and button 3 off.
+      selector:
+        target:
+          entity:
+            domain: light
+
+    second_light:
+      name: Second Light
+      description: Light(s) controlled by button 2 on and button 4 off.
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: light
+
+    current_light:
+      name: Current Light Helper
+      description: >
+        Optional input_text helper to track which light target the dial should dim.
+      default:
+      selector:
+        entity:
+          domain: input_text
+          multiple: false
+
+    hold_light_entity:
+      name: Hold Control Light Entity
+      description: >
+        Pick one main light entity used for calculating current hue/color temperature.
+        Usually choose the main lamp/group you want long-press color control on.
+      selector:
+        entity:
+          domain: light
+          multiple: false
+
+    hold_light_target:
+      name: Hold Control Light Target
+      description: >
+        The light(s) that should be changed by long-press actions.
+        This can be the same as First Light, Second Light, or a group.
+      selector:
+        target:
+          entity:
+            domain: light
+
+    dim_scale:
+      name: Dimming Scale
+      description: >
+        Scale factor for dial dimming. Lower is more gradual, higher is faster.
+      default: 1.0
+      selector:
+        number:
+          min: 0.0
+          max: 5.0
+          step: 0.01
+          mode: slider
+
+    color_temp_step:
+      name: White Temperature Step
+      description: Kelvin step per long-press event. Higher is faster.
+      default: 250
+      selector:
+        number:
+          min: 50
+          max: 1000
+          step: 50
+          mode: slider
+
+    min_color_temp_kelvin:
+      name: Warmest White
+      default: 2200
+      selector:
+        number:
+          min: 1500
+          max: 4000
+          step: 100
+
+    max_color_temp_kelvin:
+      name: Coldest White
+      default: 6500
+      selector:
+        number:
+          min: 4000
+          max: 9000
+          step: 100
+
+    hue_step:
+      name: Color Step
+      description: >
+        Hue step in degrees. 18 = 20 stappen rond het spectrum. 24 = 15 stappen.
+      default: 18
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          mode: slider
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  first_light: !input first_light
+  second_light: !input second_light
+  current_light: !input current_light
+  hold_light_entity: !input hold_light_entity
+  dim_scale: !input dim_scale
+  color_temp_step: !input color_temp_step
+  min_color_temp_kelvin: !input min_color_temp_kelvin
+  max_color_temp_kelvin: !input max_color_temp_kelvin
+  hue_step: !input hue_step
+
+  lights:
+    first_light: !input first_light
+    second_light: !input second_light
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote
+
+action:
+  - variables:
+      command: "{{ trigger.event.data.command | default('') }}"
+      args: "{{ trigger.event.data.args | default({}) }}"
+      params: "{{ trigger.event.data.params | default({}) }}"
+      scene: "{{ trigger.event.data.params.scene_id | default(none) }}"
+      step_mode: "{{ trigger.event.data.params.step_mode | default('') }}"
+      step_size: "{{ trigger.event.data.params.step_size | default(0) }}"
+      event_text: "{{ trigger.event.data | string }}"
+
+      current_kelvin: >
+        {{ state_attr(hold_light_entity, 'color_temp_kelvin') | default(4000, true) }}
+
+      current_hue: >
+        {% set hs = state_attr(hold_light_entity, 'hs_color') %}
+        {% if hs is sequence and hs | length > 0 %}
+          {{ hs[0] | float(0) }}
+        {% else %}
+          0
+        {% endif %}
+
+  - choose:
+
+      # Button 1 short press: first light on
+      - conditions:
+          - "{{ command == 'recall' }}"
+          - "{{ scene | int == 1 }}"
+        sequence:
+          - service: homeassistant.turn_on
+            target: !input first_light
+          - choose:
+              - conditions:
+                  - "{{ current_light != none }}"
+                sequence:
+                  - service: input_text.set_value
+                    target:
+                      entity_id: !input current_light
+                    data:
+                      value: first_light
+
+      # Button 2 short press: second light on
+      - conditions:
+          - "{{ command == 'recall' }}"
+          - "{{ scene | int == 0 }}"
+        sequence:
+          - service: homeassistant.turn_on
+            target: !input second_light
+          - choose:
+              - conditions:
+                  - "{{ current_light != none }}"
+                sequence:
+                  - service: input_text.set_value
+                    target:
+                      entity_id: !input current_light
+                    data:
+                      value: second_light
+
+      # Button 3 short press: first light off
+      - conditions:
+          - "{{ command == 'recall' }}"
+          - "{{ scene | int == 5 }}"
+        sequence:
+          - service: homeassistant.turn_off
+            target: !input first_light
+          - choose:
+              - conditions:
+                  - "{{ current_light != none }}"
+                sequence:
+                  - service: input_text.set_value
+                    target:
+                      entity_id: !input current_light
+                    data:
+                      value: first_light
+
+      # Button 4 short press: second light off
+      - conditions:
+          - "{{ command == 'recall' }}"
+          - "{{ scene | int == 4 }}"
+        sequence:
+          - service: homeassistant.turn_off
+            target: !input second_light
+          - choose:
+              - conditions:
+                  - "{{ current_light != none }}"
+                sequence:
+                  - service: input_text.set_value
+                    target:
+                      entity_id: !input current_light
+                    data:
+                      value: second_light
+
+      # Dial clockwise: brightness up
+      - conditions:
+          - "{{ command == 'step_with_on_off' }}"
+          - "{{ step_mode == 'StepMode.Up' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - "{{ current_light != none }}"
+                  - "{{ states(current_light) in lights }}"
+                sequence:
+                  - service: light.turn_on
+                    target: "{{ lights[states(current_light)] }}"
+                    data:
+                      brightness_step_pct: "{{ step_size | float * dim_scale | float }}"
+                      transition: 1
+            default:
+              - service: light.turn_on
+                target: !input first_light
+                data:
+                  brightness_step_pct: "{{ step_size | float * dim_scale | float }}"
+                  transition: 1
+
+      # Dial counter-clockwise: brightness down
+      - conditions:
+          - "{{ command == 'step_with_on_off' }}"
+          - "{{ step_mode == 'StepMode.Down' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - "{{ current_light != none }}"
+                  - "{{ states(current_light) in lights }}"
+                sequence:
+                  - service: light.turn_on
+                    target: "{{ lights[states(current_light)] }}"
+                    data:
+                      brightness_step_pct: "{{ -step_size | float * dim_scale | float }}"
+                      transition: 1
+            default:
+              - service: light.turn_on
+                target: !input first_light
+                data:
+                  brightness_step_pct: "{{ -step_size | float * dim_scale | float }}"
+                  transition: 1
+
+      # Button 1 long press: white tint colder/brighter
+      - conditions:
+          - >
+            {{
+              command in ['button_1_hold', 'button_1_long_press', 'button_1_long_release']
+              or 'button_1_hold' in event_text
+              or 'button_1_long' in event_text
+            }}
+        sequence:
+          - service: light.turn_on
+            target: !input hold_light_target
+            data:
+              color_temp_kelvin: >
+                {% set new = current_kelvin | int + color_temp_step | int %}
+                {{ [new, max_color_temp_kelvin | int] | min }}
+              transition: 0.4
+
+      # Button 3 long press: white tint warmer
+      - conditions:
+          - >
+            {{
+              command in ['button_3_hold', 'button_3_long_press', 'button_3_long_release']
+              or 'button_3_hold' in event_text
+              or 'button_3_long' in event_text
+            }}
+        sequence:
+          - service: light.turn_on
+            target: !input hold_light_target
+            data:
+              color_temp_kelvin: >
+                {% set new = current_kelvin | int - color_temp_step | int %}
+                {{ [new, min_color_temp_kelvin | int] | max }}
+              transition: 0.4
+
+      # Button 2 long press: hue forward
+      - conditions:
+          - >
+            {{
+              command in ['button_2_hold', 'button_2_long_press', 'button_2_long_release']
+              or 'button_2_hold' in event_text
+              or 'button_2_long' in event_text
+            }}
+        sequence:
+          - service: light.turn_on
+            target: !input hold_light_target
+            data:
+              hs_color:
+                - "{{ ((current_hue | float) + (hue_step | float)) % 360 }}"
+                - 100
+              transition: 0.4
+
+      # Button 4 long press: hue backward
+      - conditions:
+          - >
+            {{
+              command in ['button_4_hold', 'button_4_long_press', 'button_4_long_release']
+              or 'button_4_hold' in event_text
+              or 'button_4_long' in event_text
+            }}
+        sequence:
+          - service: light.turn_on
+            target: !input hold_light_target
+            data:
+              hs_color:
+                - "{{ ((current_hue | float) - (hue_step | float)) % 360 }}"
+                - 100
+              transition: 0.4
