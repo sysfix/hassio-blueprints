@@ -1,0 +1,267 @@
+blueprint:
+  name: "ZHA - AwoX / Eglo ERCU_3groups_Zm - 3 Group Light Controller"
+  description: >
+    Controls three selectable light groups with the AwoX / Eglo ERCU_3groups_Zm remote.
+    Buttons 1, 2 and 3 select the active group. All other buttons control the currently selected group.
+
+  domain: automation
+
+  input:
+    remote:
+      name: Remote
+      selector:
+        device:
+          integration: zha
+          model: ERCU_3groups_Zm
+
+    selected_group_helper:
+      name: Selected group helper
+      description: Input select helper with options 1, 2 and 3.
+      selector:
+        entity:
+          domain: input_select
+
+    group_1_target:
+      name: Group 1 light target
+      selector:
+        target:
+          entity:
+            domain: light
+
+    group_2_target:
+      name: Group 2 light target
+      selector:
+        target:
+          entity:
+            domain: light
+
+    group_3_target:
+      name: Group 3 light target
+      selector:
+        target:
+          entity:
+            domain: light
+
+    brightness_step:
+      name: Brightness step percentage
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+mode: restart
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote
+
+variables:
+  selected_group: !input selected_group_helper
+  command: "{{ trigger.event.data.command }}"
+  cluster_id: "{{ trigger.event.data.cluster_id }}"
+  args: "{{ trigger.event.data.args }}"
+  brightness_step: !input brightness_step
+
+action:
+  - choose:
+
+      # Select group 1
+      # NOTE: this condition may need adjustment after checking the real event from button 1
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'recall' and args | length > 0 and args[0] == 1 }}"
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input selected_group_helper
+            data:
+              option: "1"
+
+      # Select group 2
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'recall' and args | length > 0 and args[0] == 2 }}"
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input selected_group_helper
+            data:
+              option: "2"
+
+      # Select group 3
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'recall' and args | length > 0 and args[0] == 3 }}"
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input selected_group_helper
+            data:
+              option: "3"
+
+      # ON
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'on' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ states(selected_group) == '1' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_1_target
+              - conditions: "{{ states(selected_group) == '2' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_2_target
+              - conditions: "{{ states(selected_group) == '3' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_3_target
+
+      # OFF
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'off' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ states(selected_group) == '1' }}"
+                sequence:
+                  - service: light.turn_off
+                    target: !input group_1_target
+              - conditions: "{{ states(selected_group) == '2' }}"
+                sequence:
+                  - service: light.turn_off
+                    target: !input group_2_target
+              - conditions: "{{ states(selected_group) == '3' }}"
+                sequence:
+                  - service: light.turn_off
+                    target: !input group_3_target
+
+      # Brightness up
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'move_with_on_off' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ states(selected_group) == '1' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_1_target
+                    data:
+                      brightness_step_pct: "{{ brightness_step }}"
+              - conditions: "{{ states(selected_group) == '2' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_2_target
+                    data:
+                      brightness_step_pct: "{{ brightness_step }}"
+              - conditions: "{{ states(selected_group) == '3' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_3_target
+                    data:
+                      brightness_step_pct: "{{ brightness_step }}"
+
+      # Brightness down
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'move' }}"
+        sequence:
+          - choose:
+              - conditions: "{{ states(selected_group) == '1' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_1_target
+                    data:
+                      brightness_step_pct: "{{ brightness_step * -1 }}"
+              - conditions: "{{ states(selected_group) == '2' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_2_target
+                    data:
+                      brightness_step_pct: "{{ brightness_step * -1 }}"
+              - conditions: "{{ states(selected_group) == '3' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_3_target
+                    data:
+                      brightness_step_pct: "{{ brightness_step * -1 }}"
+
+      # Red
+      - conditions:
+          - condition: template
+            value_template: "{{ cluster_id == 768 and args | length > 1 and args[1] == 255 }}"
+        sequence:
+          - choose:
+              - conditions: "{{ states(selected_group) == '1' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_1_target
+                    data:
+                      rgb_color: [255, 0, 0]
+              - conditions: "{{ states(selected_group) == '2' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_2_target
+                    data:
+                      rgb_color: [255, 0, 0]
+              - conditions: "{{ states(selected_group) == '3' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_3_target
+                    data:
+                      rgb_color: [255, 0, 0]
+
+      # Green
+      - conditions:
+          - condition: template
+            value_template: "{{ cluster_id == 768 and args | length > 1 and args[1] == 85 }}"
+        sequence:
+          - choose:
+              - conditions: "{{ states(selected_group) == '1' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_1_target
+                    data:
+                      rgb_color: [0, 255, 0]
+              - conditions: "{{ states(selected_group) == '2' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_2_target
+                    data:
+                      rgb_color: [0, 255, 0]
+              - conditions: "{{ states(selected_group) == '3' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_3_target
+                    data:
+                      rgb_color: [0, 255, 0]
+
+      # Blue
+      - conditions:
+          - condition: template
+            value_template: "{{ cluster_id == 768 and args | length > 1 and args[1] == 170 }}"
+        sequence:
+          - choose:
+              - conditions: "{{ states(selected_group) == '1' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_1_target
+                    data:
+                      rgb_color: [0, 80, 255]
+              - conditions: "{{ states(selected_group) == '2' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_2_target
+                    data:
+                      rgb_color: [0, 80, 255]
+              - conditions: "{{ states(selected_group) == '3' }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input group_3_target
+                    data:
+                      rgb_color: [0, 80, 255]

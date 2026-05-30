@@ -1,0 +1,223 @@
+blueprint:
+  name: "ZHA - AwoX / Eglo ERCU_3groups_Zm Custom Actions"
+  description: >
+    This blueprint translates ZHA cluster events from the
+    AwoX / Eglo Connect.Z remote control (model ERCU_3groups_Zm)
+    into customizable Home Assistant actions.
+
+    The remote does not expose buttons as entities in ZHA.
+    Instead, it sends Zigbee cluster events. This blueprint maps
+    those events into clean action triggers so every button can
+    execute any Home Assistant action you want.
+
+    Features:
+      • Full button mapping
+      • ON / OFF buttons
+      • Brightness Up / Down
+      • RGB color buttons
+      • Warm / Cold color temperature buttons
+      • Mix button support
+      • Favorite scene buttons
+      • Fully customizable actions
+
+    Important:
+      • Update the remote firmware using the AwoX Home Control app
+      • Some buttons require holding the button briefly to trigger
+      • Designed specifically for ZHA
+
+  domain: automation
+  author: "Mstheeduar (English translation by Janus)"
+
+  input:
+    remote:
+      name: Remote Control
+      description: Select the AwoX / Eglo remote
+      selector:
+        device:
+          integration: zha
+          model: ERCU_3groups_Zm
+
+    button_on:
+      name: ON Button
+      default: []
+      selector:
+        action: {}
+
+    button_off:
+      name: OFF Button
+      default: []
+      selector:
+        action: {}
+
+    button_up:
+      name: Brightness Up
+      default: []
+      selector:
+        action: {}
+
+    button_down:
+      name: Brightness Down
+      default: []
+      selector:
+        action: {}
+
+    button_red:
+      name: Red Button
+      default: []
+      selector:
+        action: {}
+
+    button_green:
+      name: Green Button
+      default: []
+      selector:
+        action: {}
+
+    button_blue:
+      name: Blue Button
+      default: []
+      selector:
+        action: {}
+
+    button_mix:
+      name: Mix Button
+      default: []
+      selector:
+        action: {}
+
+    button_warm:
+      name: Warm White Button
+      default: []
+      selector:
+        action: {}
+
+    button_cold:
+      name: Cold White Button
+      default: []
+      selector:
+        action: {}
+
+    button_scene_1:
+      name: Favorite Button 1
+      default: []
+      selector:
+        action: {}
+
+    button_scene_2:
+      name: Favorite Button 2
+      default: []
+      selector:
+        action: {}
+
+    button_scene_3:
+      name: Favorite Button 3
+      default: []
+      selector:
+        action: {}
+
+mode: restart
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote
+
+variables:
+  command: "{{ trigger.event.data.command }}"
+  cluster_id: "{{ trigger.event.data.cluster_id }}"
+  args: "{{ trigger.event.data.args }}"
+
+action:
+  - choose:
+
+      # ON
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'on' }}
+        sequence: !input button_on
+
+      # OFF
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'off' }}
+        sequence: !input button_off
+
+      # BRIGHTNESS UP
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'move_with_on_off' and args[0] == 0 }}
+        sequence: !input button_up
+
+      # BRIGHTNESS DOWN
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'move' and args[0] == 1 }}
+        sequence: !input button_down
+
+      # RED
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ cluster_id == 768 and args[1] == 255 }}
+        sequence: !input button_red
+
+      # GREEN
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ cluster_id == 768 and args[1] == 85 }}
+        sequence: !input button_green
+
+      # BLUE
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ cluster_id == 768 and args[1] == 170 }}
+        sequence: !input button_blue
+
+      # MIX
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'color_loop_set' }}
+        sequence: !input button_mix
+
+      # WARM WHITE
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'step_color_temp' and args[0] == 1 }}
+        sequence: !input button_warm
+
+      # COLD WHITE
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'step_color_temp' and args[0] == 3 }}
+        sequence: !input button_cold
+
+      # FAVORITE 1
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'recall' and args[0] == 1 }}
+        sequence: !input button_scene_1
+
+      # FAVORITE 2
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'recall' and args[0] == 2 }}
+        sequence: !input button_scene_2
+
+      # FAVORITE 3
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ command == 'recall' and args[0] == 3 }}
+        sequence: !input button_scene_3
